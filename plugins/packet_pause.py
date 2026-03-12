@@ -89,7 +89,7 @@ def render(r):
         return f"""<!doctype html>
 <html>
 <body style="font-family:sans-serif">
-<h2>stall</h2>
+<h2>packet_pause</h2>
 <p style="white-space:pre-line; max-width:1000px">{r["text"]}</p>
 </body>
 </html>
