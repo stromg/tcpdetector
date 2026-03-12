@@ -37,16 +37,19 @@ def detect(rows):
 
     pause_rate = 100.0 * pauses / total_data_packets
 
-    if pause_rate < 0.1:
+    if pause_rate == 0:
         severity = "LOW"
-        interpretation = "No significant packet pauses detected."
+        interpretation = "No packet pauses detected."
+    elif pause_rate < 0.1:
+        severity = "LOW"
+        interpretation = "Very low packet pause level detected. Only isolated pauses were seen."
     elif pause_rate < 1.0:
         severity = "MODERATE"
         interpretation = "Some long packet pauses were detected."
     else:
         severity = "HIGH"
         interpretation = "Frequent long packet pauses were detected."
-
+        
     text = (
         "This detector looks for long packet pauses (TCP stalls).\n\n"
         f"A packet pause means an unusually long time gap between TCP data packets. "
@@ -67,7 +70,10 @@ def detect(rows):
         )
         return {
             "plot": False,
-            "text": text
+            "text": text,
+            "severity": severity,
+            "pause_rate": pause_rate,
+            "max_pause": max_pause
         }
 
     return {
@@ -101,7 +107,7 @@ def render(r):
     return f"""<!doctype html>
 <html>
 <body style="font-family:sans-serif">
-<h2>stall</h2>
+<h2>packet_pause</h2>
 <p style="white-space:pre-line; max-width:1000px">{r["text"]}</p>
 <canvas id="c" width="1000" height="600"></canvas>
 <script>
