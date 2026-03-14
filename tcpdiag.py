@@ -38,7 +38,7 @@ def load_csv(path):
 
 
 def print_usage_and_plugins():
-    print("usage: python3 tcp_detective.py <plugin> <file.csv>")
+    print("usage: python3 tcpdiag.py <plugin> <file.csv>")
     print("Available plugins:")
     for plugin_name in list_plugins():
         print(f" - {plugin_name}")
@@ -50,7 +50,7 @@ def main():
         sys.exit(0)
 
     if len(sys.argv) != 3:
-        print("usage: python3 tcp_detective.py <plugin> <file.csv>")
+        print("usage: python3 tcpdiag.py <plugin> <file.csv>")
         sys.exit(1)
 
     plugin_name = sys.argv[1]
