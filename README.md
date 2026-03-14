@@ -1,350 +1,185 @@
-# TCP Traffic Detector
 
-A small tool that analyzes TCP captures exported from Wireshark and tries to detect common network problems.
+# tcpdiag
 
-The tool runs small plugins that look for typical traffic patterns such as packet loss, rate limiting, or long pauses in traffic.
+**tcpdiag** is a small TCP diagnostics tool that turns Wireshark captures into quick visual reports.
 
-Input: CSV exported from Wireshark.  
-Output: simple HTML report.
+Goal: understand network problems in **seconds**, not hours.
 
-## Current plugins
+The tool detects common TCP issues such as:
 
-- `retransmission`
-- `rate_limit`
-- `packet_pause`
+- packet loss (retransmissions)
+- traffic shaping / rate limiting
+- long pauses in packet flow
+- MTU blackholes (PMTUD failures)
+- bandwidth distribution per service
+- DSCP / QoS markings
 
-Each plugin detects a different TCP symptom.
+tcpdiag converts packet data into a **single HTML report with graphs**.
 
-### 1. retransmission
+---
 
-Detects packet loss by counting TCP retransmissions.
+# Quick start (10 seconds)
 
-When packets are lost in the network, TCP resends them.
-
-Typical causes:
-
-- physical link errors
-- Wi‑Fi interference
-- congestion drops
-- overloaded routers
-- duplex problems
-- MTU / tunnel issues in some cases
-
-Normal traffic:
-
-```text
-packet
-packet
-packet
-packet
-packet
-```
-
-Packet loss:
-
-```text
-packet
-packet
-packet
-   X   (packet lost)
-packet
-packet
-retransmit packet
-```
-
-What the plugin detects:
-
-```text
-retransmission rate (%)
-difference between small and large packets
-```
-
-### 2. rate_limit
-
-Detects traffic pacing or rate limiting.
-
-Some systems send packets at fixed intervals.
-
-Typical causes:
-
-- traffic shaping
-- QoS policers
-- application pacing
-- bandwidth limiters
-- token bucket style limiters
-
-Normal TCP traffic:
-
-```text
-packet packet packet
-packet packet
-packet packet packet
-```
-
-Rate limited traffic:
-
-```text
-packet
------ 10 ms -----
-packet
------ 10 ms -----
-packet
------ 10 ms -----
-packet
-```
-
-What the plugin detects:
-
-```text
-strong peak in packet interval histogram
-```
-
-Typical suspicious values:
-
-```text
-10 ms
-20 ms
-25 ms
-50 ms
-```
-
-### 3. packet_pause
-
-Detects long pauses between TCP data packets.
-
-This is different from packet loss. Packets are not necessarily lost, but the flow temporarily stops.
-
-Typical causes:
-
-- congestion
-- queueing
-- Wi‑Fi airtime contention
-- endpoint processing delay
-- CPU delay
-- traffic shaping
-- policers
-
-Normal traffic:
-
-```text
-packet
-packet
-packet
-packet
-packet
-```
-
-Packet pause:
-
-```text
-packet
-packet
-packet
-
------ 120 ms pause -----
-
-packet
-packet
-```
-
-What the plugin detects:
-
-```text
-packet pause rate (%)
-max packet interval
-```
-
-A packet pause is a long time gap between TCP data packets. In the current plugin, a pause means a gap greater than the configured threshold.
-
-## Design principle
-
-Graphs are only generated when they support a meaningful conclusion.
-
-If a metric is extremely small, the tool prints a summary instead of generating a graph.
+1. Install the Wireshark Lua exporter
+2. Open a capture in Wireshark
+3. Run tcpdiag
 
 Example:
 
-```text
-Retransmission levels are extremely low (<0.1%).
-No graph generated because the values would not be visually meaningful.
+```
+python3 tcpdiag.py bandwidth /tmp/ws_export.csv
 ```
 
-This keeps the output focused on signal rather than noise.
+This generates:
 
-## Summary
-
-Each plugin detects a different symptom:
-
-```text
-retransmission -> packet loss
-rate_limit     -> traffic shaping / pacing
-packet_pause   -> long pauses in packet flow
 ```
-
-Together they help identify common TCP problems such as:
-
-```text
-packet loss
-rate limiting
-Wi‑Fi interference
-congestion
-queueing delays
-endpoint stalls
-```
-
-## File layout
-
-Suggested layout:
-
-```text
-graph_detector.py
-plugins/
-    __init__.py
-    retransmission.py
-    rate_limit.py
-    packet_pause.py
-```
-
-## Run the detector
-
-Examples:
-
-```bash
-python3 graph_detector.py retransmission /tmp/ws_export.csv
-python3 graph_detector.py rate_limit /tmp/ws_export.csv
-python3 graph_detector.py packet_pause /tmp/ws_export.csv
-```
-
-The detector writes:
-
-```text
 graph.html
 ```
 
-Open it in a browser.
+Open it in your browser.
 
-## Wireshark Lua exporter
+---
 
-The included Lua script exports the CSV format expected by the Python tool.
+# How it works
 
-Exported columns:
+tcpdiag has three parts:
 
-```text
+```
+Wireshark capture
+      ↓
+Lua exporter plugin
+      ↓
+CSV file
+      ↓
+tcpdiag Python plugins
+      ↓
+HTML report with graphs
+```
+
+The Lua plugin automatically exports packet data while Wireshark processes the capture.
+
+No manual column selection required.
+
+---
+
+# Available plugins
+
+| Plugin | Detects |
+|------|------|
+| retransmission | packet loss |
+| rate_limit | traffic shaping / pacing |
+| packet_pause | long pauses in packet flow |
+| bandwidth | bandwidth per service / DSCP |
+| mtu_blackhole | PMTUD / MTU failures |
+
+Example:
+
+```
+python3 tcpdiag.py retransmission capture.csv
+```
+
+---
+
+# Install Wireshark exporter
+
+The Lua exporter must be installed so tcpdiag receives structured packet data.
+
+Linux / macOS:
+
+```
+mkdir -p ~/.local/lib/wireshark/plugins
+cp export_ws.lua ~/.local/lib/wireshark/plugins/
+```
+
+Restart Wireshark.
+
+Windows:
+
+```
+%APPDATA%\Wireshark\plugins
+```
+
+Copy `export_ws.lua` there and restart Wireshark.
+
+---
+
+# Exported CSV
+
+The Lua exporter automatically writes:
+
+Linux / macOS
+
+```
+/tmp/ws_export.csv
+```
+
+Windows
+
+```
+%TEMP%\ws_export.csv
+```
+
+Fields include:
+
+```
 Time
 Delta
-Source
-Destination
-Stream
-Seq
-Ack
-TCP Len
 Length
+TCP Len
 Retrans
-DupAck
+DSCP
+TCP ports
+UDP ports
 AckRTT
 Window
 ```
 
-### Install the Lua plugin
+---
 
-Do not run the script from the Lua console. It should be loaded as a Wireshark plugin.
+# Example use cases
 
-#### Linux
+tcpdiag helps diagnose problems such as:
 
-Create the personal plugin directory if needed:
+- MTU blackholing
+- ISP traffic shaping
+- QoS misconfiguration
+- WiFi congestion
+- retransmission bursts
+- bandwidth hogging services
 
-```bash
-mkdir -p ~/.local/lib/wireshark/plugins
+The tool is designed for **engineers troubleshooting real networks**.
+
+---
+
+# Design philosophy
+
+tcpdiag focuses on:
+
+- simplicity
+- no dependencies
+- fast troubleshooting
+- visual explanations
+
+Graphs are only generated when they add value.
+
+If a metric is extremely small, the report prints a short summary instead.
+
+This keeps the output focused on **signal rather than noise**.
+
+---
+
+# Project structure
+
 ```
+tcpdiag.py
 
-Copy the file:
+plugins/
+    retransmission.py
+    rate_limit.py
+    packet_pause.py
+    bandwidth.py
+    mtu_blackhole.py
 
-```bash
-cp export_tcp.lua ~/.local/lib/wireshark/plugins/
+wireshark/
+    export_ws.lua
 ```
-
-Restart Wireshark.
-
-#### macOS
-
-Create the personal plugin directory if needed:
-
-```bash
-mkdir -p ~/.local/lib/wireshark/plugins
-```
-
-Copy the file:
-
-```bash
-cp export_tcp.lua ~/.local/lib/wireshark/plugins/
-```
-
-Restart Wireshark.
-
-If your setup uses a different personal plugin path, check it with:
-
-```bash
-wireshark -G folders
-```
-
-Look for:
-
-```text
-Personal Lua Plugins
-```
-
-#### Windows
-
-Copy `export_tcp.lua` into your personal Wireshark plugins directory.
-
-Typical location:
-
-```text
-%APPDATA%\Wireshark\plugins
-```
-
-If needed, create the folder first.
-
-Then restart Wireshark.
-
-### Verify that the plugin loaded
-
-In Wireshark:
-
-```text
-Help -> About Wireshark -> Plugins
-```
-
-You should see `export_tcp.lua`.
-
-### Use the exporter
-
-1. Start Wireshark
-2. Open a TCP capture
-3. Let Wireshark dissect the packets
-4. The exporter writes a CSV file
-
-The Lua plugin automatically chooses an output path based on the operating system:
-
-- Windows: `%TEMP%\ws_export.csv`
-- Linux/macOS: `/tmp/ws_export.csv`
-
-### Check the exported CSV
-
-Linux/macOS:
-
-```bash
-head /tmp/ws_export.csv
-```
-
-Windows PowerShell:
-
-```powershell
-Get-Content "$env:TEMP\ws_export.csv" -TotalCount 5
-```
-
-## Notes
-
-- The Lua exporter must be loaded at Wireshark startup
-- `Field.new(...)` must be defined before taps are created
-- The Python plugins expect the exported CSV header names exactly as written above
